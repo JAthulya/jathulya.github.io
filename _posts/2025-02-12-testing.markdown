@@ -1,8 +1,8 @@
 ---
 layout: post
-title: "My First Blog Post"
+title: "My not First Blog Post"
 date: 2025-02-12
 categories: [blog]
 ---
 
-This is my first blog post written in **Markdown**.
+is this **working**.
