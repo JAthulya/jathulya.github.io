@@ -1,6 +1,6 @@
 ---
 layout: post
-title: "My not First Blog Post"
+title: "abcd"
 date: 2025-02-12
 categories: [blog]
 ---

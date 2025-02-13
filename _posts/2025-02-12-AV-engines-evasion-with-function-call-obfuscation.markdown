@@ -1,21 +1,21 @@
 ﻿---
 layout: post
-title: "AV engines evasion with function call Obfuscation with C++ example"
+title: "Bypassing AV Detection with C++ Function Call Obfuscation"
 date: 2025-02-13
 categories: [blog]
 ---
 # Introduction
 
-Portable Executable(PE) module such as .exe or .dll relies on imported functions because the executable does not define them. When program runs, the os loads these external functions from system DLLs (ex- KERNEL32.dll) into memory and making them available to the program. 
+Portable Executable(PE) module such as .exe or .dll relies on imported functions because the executable does not define them. When program runs, OS loads these external functions from system DLLs (ex- KERNEL32.dll) into memory and making them available to the program. 
 By analyzing these imported functions, AV engines can determine an executable’s functionality to detect potential malicious behavior in malicious executables. 
 
 To bypass this detection, malware authors can use a technique called **Function Call Obfuscation**. Function call obfuscation is when hiding the external functions that will be called during runtime by manually loading and retrieving function addresses at runtime. For that we can use windows API functions called __GetModuleHandle__ and __GetProcAddress__. 
 
-__GetModuleHandle__ – this retrieves handle to a DLL that is already loaded into the process memory. 
+__GetModuleHandle__ - this retrieves handle to a DLL that is already loaded into the process memory. 
 
 `HMODULE GetModuleHandleA(LPCSTR lpModuleName);`
 
-__GetProcAddress__ -this can be used to get the memory address of a specific function exported from above DLL. 
+__GetProcAddress__ - this can be used to get the memory address of a specific function exported from above DLL. 
 
 `FARPROC GetProcAddress(HMODULE hModule, LPCSTR lpProcName);`
 
@@ -187,7 +187,7 @@ cVirtualAllocStr[cVirtualAllocLen] = '\0';
 {% endhighlight %}
 
 now the program will run perfectly.
-if you can remember i added memory region with read, write and execution permission. some AV engine can flag this because it is not usual to have a process which need a memory with read, write, execution permission. so we can change this like this. first we can define the memory region with only read and write permission. then we can modifies the memory protection to executable. 
+if you can remember i added memory region with read, write and execution permission. some AV engine can flag this because it is not usual to have a process which need a memory with read, write, execution permission. so we can change this too. first we can define the memory region with only read and write permission. then we can modifies the memory protection to executable. 
 
 allocating memory with only read and write permission. 
 
