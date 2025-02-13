@@ -4,6 +4,7 @@ title: "AV engines evasion with function call Obfuscation with C++ example"
 date: 2025-02-12
 categories: [blog]
 ---
+# Introduction
 
 Portable Executable(PE) module such as .exe or .dll relies on imported functions because the executable does not define them. When program runs, the os loads these external functions from system DLLs (ex- KERNEL32.dll) into memory and making them available to the program. 
 By analyzing these imported functions, AV engines can determine an executable’s functionality to detect potential malicious behavior in malicious executables. 
@@ -80,10 +81,16 @@ int main(void) {
 }
 {% endhighlight %}
 
-now lets see the imported functions from KERNEL32.dll in this function. 
+now lets see the imported functions from KERNEL32.dll in this executable. 
 
 <img src="/assets/images/blog1 - av evasion with function call obfuscation/1.1.png" alt="function call" width="500">
 
 you can see a imported function called **VirtualAlloc**. this is used to allocate memory for shellcode execution.
+also lets check the virus total detection for this PE. 
+
+<img src="/assets/images/blog1 - av evasion with function call obfuscation/1.2.png" alt="virus total detection" width="1000">  
+as you can see 39 engines out of 72 identified this as malicious. a
 
 let's use Function call obfuscation technique to remove this from loading. 
+
+# Function Call Obfuscation
