@@ -1,7 +1,7 @@
 ﻿---
 layout: post
 title: "AV engines evasion with function call Obfuscation with C++ example"
-date: 2025-02-12
+date: 2025-02-13
 categories: [blog]
 ---
 # Introduction
