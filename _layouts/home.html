@@ -3,6 +3,12 @@ layout: default
 ---
 
 <div class="home">
+  <input type="text" id="search-input" placeholder="Search posts..." />
+<ul id="search-results"></ul>
+
+<!-- Load Lunr.js and your script -->
+<script src="https://unpkg.com/lunr/lunr.js"></script>
+<script src="{{ "/assets/js/search.js" | relative_url }}"></script>
   {%- if page.title -%}
     <h1 class="page-heading">{{ page.title }}</h1>
   {%- endif -%}
