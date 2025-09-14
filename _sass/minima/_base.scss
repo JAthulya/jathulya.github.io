@@ -8,7 +8,9 @@ dl, dd, ol, ul, figure {
   padding: 0;
 }
 
-
+h1 {
+  color: red;
+}
 
 /**
  * Basic styling
@@ -175,8 +177,8 @@ pre {
  * Wrapper
  */
 .wrapper {
-  max-width: -webkit-calc(1200px - (30px * 2));
-  max-width:         calc(1200px - (30px * 2));
+  max-width: -webkit-calc(1000px - (30px * 2));
+  max-width:         calc(1000px - (30px * 2));
   margin-right: auto;
   margin-left: auto;
   padding-right: $spacing-unit;

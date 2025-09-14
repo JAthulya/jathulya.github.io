@@ -1,0 +1,371 @@
+---
+layout: post
+title: "Bypassing E2E Encryption in Web Applications"
+date: 2025-09-12
+categories: [blog]
+toc: |
+  <ul>
+    <li><a href="#introduction">Introduction</a></li>
+    <li><a href="#first">First Method</a></li>
+    <li><a href="#second">Second Method</a></li>
+    <li><a href="#nsc">Certificate Pinning via Network Security Configuration</a></li>
+  </ul>
+---
+
+# Introduction {#introduction} 
+
+In some web applications, we encounter encryption and decryption mechanisms implemented in client-server communication. These can make it difficult to manipulate parameter values and carry out penetration testing in the usual way. In this blog post, I will discuss three possible techniques to bypass such end-to-end encryption in web applications. this is based on a presentation done by <b>Gabriel RUAUD</b>. 
+
+<span style="color:#d05dfc">What is E2E Encryption</span><br>
+
+In some web applications, we encounter end-to-end encryption (E2EE) mechanisms implemented in client-server communication. E2EE ensures that data is encrypted in the browser on the client side before being sent to the server, making it unreadable to anyone who intercepts it during transit. While this adds a layer of security
+
+<img src="/assets/images/blog4-E2EE/1.png" width="1000">
+
+ <span style="color:#d05dfc">Creating Web application with E2EE</span><br>
+
+ With the help of ChatGPT, I created a web application that uses end-to-end encryption, which I will use to demonstrate techniques for bypassing the encryption.
+
+ To make it easier to capture the traffic using Burp Suite, I will map my 127.0.0.1 address to a custom domain name in the /etc/hosts file.
+
+  <img src="/assets/images/blog4-E2EE/2.png" width="1000">
+
+  step by step method to create the web application with E2EE
+
+  1) create a new folder
+
+  2) create 'server.js' file and 'public/index.html' file (index.html inside the 'public' folder). 
+  {% highlight c# %}
+
+{% endhighlight %}
+  server.js
+  {% highlight javascript %}
+
+  // server.js
+const express = require('express');
+const path = require('path');
+const crypto = require('crypto'); // only used to generate random key
+const CryptoJS = require('crypto-js');
+
+const app = express();
+app.use(express.json());
+app.use(express.static(path.join(__dirname, 'public')));
+
+// === Demo-only: generate a symmetric key at startup and serve it to clients ===
+// 32 bytes = 256 bits
+const symKeyBuf = crypto.randomBytes(32);
+const symKeyB64 = symKeyBuf.toString('base64');
+console.log('Symmetric key (base64) generated. (demo only)');
+
+// Serve base64 key at /symkey
+app.get('/symkey', (req, res) => {
+  res.type('text').send(symKeyB64);
+});
+
+// Helper: base64 -> CryptoJS WordArray
+function b64ToWordArray(b64) {
+  return CryptoJS.enc.Base64.parse(b64);
+}
+
+// Helper: CryptoJS WordArray -> utf8 string
+function wordArrayToUtf8(wordArray) {
+  return CryptoJS.enc.Utf8.stringify(wordArray);
+}
+
+// POST /submit expects JSON: { iv: base64, ciphertext: base64, hmac: base64 }
+app.post('/submit', (req, res) => {
+  const { iv, ciphertext, hmac } = req.body;
+  if (!iv || !ciphertext || !hmac) {
+    return res.status(400).json({ error: 'Missing iv, ciphertext or hmac' });
+  }
+
+  try {
+    // Recreate key as WordArray
+    const keyWA = b64ToWordArray(symKeyB64);
+
+    // Verify HMAC: HMAC_SHA256( iv||ciphertext ) using key
+    const macInput = iv + '::' + ciphertext; // explicit delimiter
+    const computedHmac = CryptoJS.HmacSHA256(macInput, keyWA).toString(CryptoJS.enc.Base64);
+
+    if (!crypto.timingSafeEqual(Buffer.from(computedHmac, 'base64'), Buffer.from(hmac, 'base64'))) {
+      console.error('HMAC mismatch — possible tampering');
+      return res.status(400).json({ error: 'HMAC mismatch' });
+    }
+
+    // Prepare ciphertext as CipherParams with ciphertext WordArray
+    const cipherParams = CryptoJS.lib.CipherParams.create({
+      ciphertext: b64ToWordArray(ciphertext)
+    });
+
+    // Decrypt: AES-256-CBC with provided IV
+    const ivWA = b64ToWordArray(iv);
+    const decryptedWA = CryptoJS.AES.decrypt(cipherParams, keyWA, {
+      iv: ivWA,
+      mode: CryptoJS.mode.CBC,
+      padding: CryptoJS.pad.Pkcs7
+    });
+
+    const plaintext = wordArrayToUtf8(decryptedWA);
+
+    console.log('--- Decrypted text received from client ---');
+    console.log(plaintext);
+    console.log('-------------------------------------------');
+
+    res.json({ status: 'ok' });
+  } catch (err) {
+    console.error('Decryption failed:', err);
+    res.status(500).json({ error: 'Decryption failed', message: err.message });
+  }
+});
+
+const PORT = 3000;
+app.listen(PORT, () => {
+  console.log(`Server running: http://localhost:${PORT}/`);
+  console.log('Open http://localhost:3000 in your browser');
+});
+
+
+{% endhighlight %}
+
+/public/index.html
+
+{% highlight javascript %}
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>CryptoJS AES-CBC + HMAC Demo</title>
+  <style>
+    body { font-family: system-ui, Arial; padding: 18px; max-width:720px; }
+    textarea, input { width:100%; padding:8px; box-sizing:border-box; margin:8px 0; }
+    button { padding:8px 12px; margin-right:8px; }
+    #log { white-space: pre-wrap; background:#f7f7f7; padding:10px; border-radius:6px; min-height:48px; }
+  </style>
+</head>
+<body>
+  <h2>E2EE application</h2>
+
+  <label for="txt">Text to encrypt:</label>
+  <textarea id="txt" rows="4">hello secret</textarea>
+
+  <div>
+    <button id="send">Encrypt & Send</button>
+    <button id="clear">Clear</button>
+  </div>
+
+  <div id="log">Status: loading symmetric key...</div>
+
+  <!-- CryptoJS library from CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+
+  <script>
+  (async () => {
+    const logEl = document.getElementById('log');
+    const log = (s) => logEl.textContent = s;
+
+    // Helper: convert CryptoJS WordArray -> base64 string
+    function waToB64(wa) { return CryptoJS.enc.Base64.stringify(wa); }
+
+    try {
+      // Fetch symmetric key (base64) from server (demo only)
+      const symKeyB64 = await fetch('/symkey').then(r => {
+        if (!r.ok) throw new Error('Failed to fetch symmetric key');
+        return r.text();
+      });
+
+      log('Symmetric key loaded (demo). Ready.');
+
+      const keyWA = CryptoJS.enc.Base64.parse(symKeyB64);
+
+      document.getElementById('send').addEventListener('click', async () => {
+        const plaintext = document.getElementById('txt').value || '';
+        if (!plaintext) { alert('Type something'); return; }
+
+        try {
+          // Generate random IV (16 bytes for AES-CBC)
+          const ivWA = CryptoJS.lib.WordArray.random(16);
+
+          // Encrypt (AES-CBC, PKCS7)
+          const encrypted = CryptoJS.AES.encrypt(plaintext, keyWA, {
+            iv: ivWA,
+            mode: CryptoJS.mode.CBC,
+            padding: CryptoJS.pad.Pkcs7
+          });
+
+          // ciphertext and iv as base64
+          const ctB64 = encrypted.ciphertext.toString(CryptoJS.enc.Base64);
+          const ivB64 = waToB64(ivWA);
+
+          // Compute HMAC over iv::ciphertext using the same key
+          const macInput = ivB64 + '::' + ctB64;
+          const hmacB64 = CryptoJS.HmacSHA256(macInput, keyWA).toString(CryptoJS.enc.Base64);
+
+          const payload = { iv: ivB64, ciphertext: ctB64, hmac: hmacB64 };
+
+          log('Sending encrypted payload to server...');
+          const res = await fetch('/submit', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+
+          if (res.ok) {
+            log('Sent! Server will decrypt and print to terminal.');
+          } else {
+            const json = await res.json().catch(()=>({}));
+            log('Server error: ' + (json.error || res.statusText || 'unknown'));
+          }
+        } catch (err) {
+          console.error(err);
+          log('Error: ' + (err.message || err));
+        }
+      });
+
+      document.getElementById('clear').addEventListener('click', () => {
+        document.getElementById('txt').value = '';
+        log('Cleared.');
+      });
+
+    } catch (err) {
+      console.error(err);
+      log('Failed: ' + (err.message || err));
+    }
+  })();
+  </script>
+</body>
+</html>
+
+{% endhighlight %}
+
+3) Initialize npm and install dependencies
+{% highlight bash %}
+npm init -y
+npm install express crypto-js
+{% endhighlight %}
+
+4) start the server
+{% highlight bash %}
+node server.js
+{% endhighlight %}
+
+After setting it up, you’ll see a basic web application with E2EE, where the user input is encrypted in the browser, sent to the server, and then decrypted by the server to display the result.
+
+now lets see how to bypass the web application E2EE.
+
+# First Method {#first}
+
+This technique involves finding the plaintext values in the JavaScript runtime memory by stepping through the execution flow of the code. To do this, we will use the browser’s debugger and set up an event listener to pause execution at the right moments and edit them.
+
+1) setting up the event listener
+
+go to the browser 'inspect' -> 'Sources'. in right side pannel go to 'Event Listener BreakPoints' -> 'Mouse', then tick the 'Click'. this will pause the execution when mouse is clicked and will give you the abilitiy to go with the flow. 
+
+<img src="/assets/images/blog4-E2EE/3.png" width="1000">
+
+2) submit the form by a mouse click and disable the event listener. you will have the debugger with pause execution in the browser.
+
+<img src="/assets/images/blog4-E2EE/4.png" width="1000">
+
+3) step through the execution. use F11 for fast, F10 for medium, F9 for slow execution.
+
+4) Review local varialbe values in right hand side and see that the value is in clear text before the encryption happens. 
+
+<img src="/assets/images/blog4-E2EE/5.png" width="1000">
+
+5) edit the value of the relevant variables via the browser (for me firefox didn't let to edit, im using chromium browser for now)
+
+<img src="/assets/images/blog4-E2EE/6.png" width="1000">
+
+in the server side, you will see the edited value is decrypted and showed in the terminal. 
+
+<img src="/assets/images/blog4-E2EE/7.png" width="1000" height="200">
+
+We have successfully bypassed the E2E encryption in the web application using a very simple method. However, as the complexity of an application increases, this approach can become time-consuming and require a lot of manual effort. In the second method, I will demonstrate a more automated way to achieve the same result.
+
+# Second Method {#second}
+
+The core idea of the second method is to automate the process of identifying the values that are being encrypted and modify them using Burp Suite’s intercept feature. To achieve this, we will override the content of the web page and inject a custom function that captures the variables before they get encrypted and sends them to us. Once we receive these values, we can modify them and send them back through the intercept feature. By altering the encryption function this way, we no longer need to manually step through the code with the debugger, as the encryption variables will now appear directly in the web traffic. I’ll provide a step-by-step guide to accomplish this.
+
+1) Find the encryption function in the web application.
+
+To achieve this, we can either step through the code using the debugger’s execution flow or search the source files for possible keywords that might reveal the encryption function, such as “async encrypt”, “encrypt(”, “-256”, “rsa”, “a256”, or “JSON.stringify”.
+in our application it is going to be this,
+
+<img src="/assets/images/blog4-E2EE/8.png" width="1000">
+
+2) Override content
+
+In the browser’s DevTools, there is an option called “Overrides” that allows you to save a web page’s source files locally. Once enabled, you can edit these files, and the next time you reload the page, the browser will load your modified content instead of the original version from the server.
+
+<img src="/assets/images/blog4-E2EE/9.png" width="1000">
+
+after that you can give the file path where to save and the allow permissions. 
+
+3) Edit the override content
+
+Here, we will inject a function that captures the variable values before they are encrypted and sends them to our local server. From there, we can modify these values as needed and send them back to the web application, which will then use the modified values, encrypt them, and forward them to the server.
+
+this is the function that i'm going to use for this task.
+
+{% highlight javascript %}
+async function editBeforeSend(originalBody){
+        const req = await fetch("http://broken:8083/editBeforeSend.php", {
+          method: "POST",
+          body: originalBody,
+          credentials: 'include'
+        });
+        let editedBody = await req.text();
+        console.log(editedBody);
+        return editedBody;
+      }
+{% endhighlight %}
+
+now let's add this to our locally saved content and call the function before the data gets encrypted. 
+
+<img src="/assets/images/blog4-E2EE/10.png" width="1000">
+
+4) Creating the PHP server.
+
+With the help of ChatGPT, I have created a simple web server that takes the request body and returns it as-is. Also, be mindful of any potential CORS misconfigurations while doing this.
+
+{% highlight php %}
+<?php
+
+$origin = $_SERVER['HTTP_ORIGIN'] ?? '*';
+
+header("Access-Control-Allow-Origin: $origin");
+header("Vary: Origin");
+header("Access-Control-Allow-Methods: POST, OPTIONS");
+header("Access-Control-Allow-Headers: Content-Type, X-Requested-With");
+header("Access-Control-Allow-Credentials: true");
+
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(204);
+    exit;
+}
+
+$data = file_get_contents("php://input");
+echo $data; 
+
+?>
+{% endhighlight %}
+
+Start the PHP server:
+
+{% highlight php %}
+php -S 127.0.0.1:8083
+{% endhighlight %}
+
+5) Intercept the traffic and enjoy the parameter manipulation.
+
+in the network traffic you will see the request to our PHP server and it returns the same result.
+
+<img src="/assets/images/blog4-E2EE/11.png" width="1000">
+
+we can now use the burpsuite intercept to capture the param value before it get encrypted and manipulate it. 
+
+<img src="/assets/images/blog4-E2EE/12.png" width="1000"> 
+
+<img src="/assets/images/blog4-E2EE/13.png" width="1000" height="300">
+
+Enjoy bypassing E2E encryption in a more automated way with much less manual effort. The only challenge is identifying the correct encryption function and ensuring that our injected function works as intended. 
