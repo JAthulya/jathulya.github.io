@@ -8,7 +8,7 @@ toc: |
     <li><a href="#introduction">Introduction</a></li>
     <li><a href="#first">First Method</a></li>
     <li><a href="#second">Second Method</a></li>
-    <li><a href="#nsc">Certificate Pinning via Network Security Configuration</a></li>
+    <li><a href="#third">Third Method</a></li>
   </ul>
 ---
 
@@ -369,3 +369,30 @@ we can now use the burpsuite intercept to capture the param value before it get 
 <img src="/assets/images/blog4-E2EE/13.png" width="1000" height="300">
 
 Enjoy bypassing E2E encryption in a more automated way with much less manual effort. The only challenge is identifying the correct encryption function and ensuring that our injected function works as intended. 
+
+
+# Third Method {#third}
+
+In this method, I will demonstrate how I bypassed E2E encryption in a real-world application. The core idea is to locate the encryption function, analyze and understand its logic, and then write our own version of that function to generate valid encrypted values and inject them where needed. Using this approach, I was able to achieve a full account takeover.
+
+The front end of the application I was pentesting was running in Vue.js development mode, so the unminified webpack bundle was loaded in the browser. This allowed me to easily inspect and understand the application’s code using the browser’s developer tools.
+
+While analyzing the debugger’s execution flow, I came across an interesting method the application uses: it retrieves values from the session storage. The challenge was that these values were also stored in encrypted form. The application would decrypt them, possibly modify them, and then re-encrypt them before sending them to the server.
+
+<img src="/assets/images/blog4-E2EE/14.png" width="1000">
+
+Here, we can identify which script is responsible for the encryption and decryption. By analyzing it, we can write our own script that performs encryption in the same way and apply the resulting values directly to the session storage.
+
+<img src="/assets/images/blog4-E2EE/15.png" width="1000">
+
+By analyzing the code, we can discover the secret key used for the symmetric encryption. With this key, we can write our own script to perform the encryption and apply the resulting values directly to the session storage.
+
+script which used to do the same encryption as the web application i was pentesting.
+
+<img src="/assets/images/blog4-E2EE/16.png" width="1000">
+
+In this method, I haven’t demonstrated a specific technique like the previous two methods. However, the key takeaway is that by carefully analyzing the JavaScript code and the application’s behavior, it’s possible to bypass E2E encryption. hope someone actually read this far and learn something. happy hacking!
+
+<img src="/assets/images/blog4-E2EE/17.png" width="1000" height="300">
+
+
